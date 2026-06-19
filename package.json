@@ -1,17 +1,16 @@
 {
-  "name": "zillow-stealth-scraper",
-  "version": "6.0.0",
-  "description": "Minimalist Real Estate Scraper",
-  "main": "index.js",
+  "name": "github-stealth-scraper",
+  "version": "1.0.0",
+  "description": "Headless Real Estate Scraper",
+  "main": "scraper.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "dotenv": "^16.3.1",
-    "google-auth-library": "^9.0.0",
-    "google-spreadsheet": "^4.1.1",
-    "puppeteer": "^21.0.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "google-auth-library": "latest",
+    "google-spreadsheet": "latest",
+    "puppeteer": "^24.15.0",
+    "puppeteer-extra": "latest",
+    "puppeteer-extra-plugin-stealth": "latest"
   }
 }
