@@ -115,7 +115,7 @@ async function runScraper() {
                 continue;
             }
 
-            // 4. Extract MINIMAL details from Next.js state
+            // 4. Extract MINIMAL details from Next.js state & JSON-LD
             const extractedData = await page.evaluate(() => {
                 const formatPropertyType = (rawType) => {
                     if (!rawType) return "";
@@ -126,6 +126,24 @@ async function runScraper() {
                         .replace(/\b\w/g, char => char.toUpperCase());
                 };
 
+                // Extract strict County string from Breadcrumb Schema
+                const extractCountyFromLD = () => {
+                    const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+                    for (let script of scripts) {
+                        try {
+                            const data = JSON.parse(script.innerText);
+                            if (data['@type'] === 'BreadcrumbList' && data.itemListElement) {
+                                for (let el of data.itemListElement) {
+                                    if (el.item && el.item.name && el.item.name.includes('County')) {
+                                        return el.item.name;
+                                    }
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    return "";
+                };
+
                 const extractFromHomeDetail = (jsonData) => {
                     let data = { addr: "", propertyType: "", desc: "", county: "" };
                     const rawCache = jsonData?.props?.pageProps?.componentProps?.gdpClientCache;
@@ -133,13 +151,16 @@ async function runScraper() {
 
                     try {
                         const parsedCache = JSON.parse(rawCache);
-                        const cacheKey = Object.keys(parsedCache)[0];
+                        
+                        // Dynamically find the key that holds the property object
+                        const cacheKey = Object.keys(parsedCache).find(key => parsedCache[key]?.property);
                         const p = parsedCache[cacheKey]?.property;
+                        
                         if (!p) return data;
 
                         data = {
                             addr: p.address?.streetAddress || "",
-                            county: p.county || "",
+                            county: p.county || "", // Strict: no city fallback here
                             propertyType: formatPropertyType(p.homeType),
                             desc: p.description || ""
                         };
@@ -153,25 +174,31 @@ async function runScraper() {
                     if (!building) return data;
 
                     data.addr = building.streetAddress || "";
-                    data.county = building.county || "";
+                    data.county = building.county || ""; // Strict: no city fallback here
                     data.desc = building.description || "";
                     return data;
                 };
 
+                // Execution flow
+                let result = { addr: "", propertyType: "", desc: "", county: "" };
                 const nextDataScript = document.querySelector('script#__NEXT_DATA__');
-                if (!nextDataScript) return {};
-
-                let jsonData;
-                try {
-                    jsonData = JSON.parse(nextDataScript.innerText);
-                } catch (e) {
-                    return {};
+                
+                if (nextDataScript) {
+                    try {
+                        const jsonData = JSON.parse(nextDataScript.innerText);
+                        result = extractFromHomeDetail(jsonData);
+                        if (!result.addr) {
+                            result = extractFromRentalBuilding(jsonData);
+                        }
+                    } catch (e) {}
                 }
 
-                let result = extractFromHomeDetail(jsonData);
-                if (!result.addr) {
-                    result = extractFromRentalBuilding(jsonData);
+                // If Next.js state doesn't have the county, use the Breadcrumbs
+                const ldCounty = extractCountyFromLD();
+                if (ldCounty) {
+                    result.county = ldCounty; 
                 }
+
                 return result;
             });
 
@@ -183,7 +210,7 @@ async function runScraper() {
             sheet.getCell(rowIndex, 13).value = "✅ SUCCESS";                 // N
 
             stagedCellsToSave.push(rowIndex);
-            console.log(`✔️ Staged Row ${actualRowNumber} | 🏠 ${extractedData.propertyType || 'Unknown'}`);
+            console.log(`✔️ Staged Row ${actualRowNumber} | 🏠 ${extractedData.propertyType || 'Unknown'} | 📍 ${extractedData.county || 'No County'}`);
             scrapeCount++;
 
         } catch (e) {
